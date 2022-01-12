@@ -3,37 +3,11 @@ package jsawn
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"reflect"
 )
 
 // that jsawn tag value for optional fields
 const TagOptional = "optional"
-
-type ParseWarning struct {
-	Warnings []error
-}
-
-func (w ParseWarning) Error() string {
-	// pick the first one for now
-	warnings := ""
-	newline := ""
-	for _, warn := range w.Warnings {
-		warnings = fmt.Sprintf("%s%s%s", warnings, newline, warn.Error())
-		newline = "\n"
-	}
-
-	plurality := "warning"
-	if len(w.Warnings) > 1 {
-		plurality += "s"
-	}
-
-	return fmt.Sprintf("%d parse %s\n%s",
-		len(w.Warnings),
-		plurality,
-		warnings,
-	)
-}
 
 func Unmarshal(data []byte, val interface{}) error {
 	rv := reflect.ValueOf(val)

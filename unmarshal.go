@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"runtime"
 )
 
 // that jsawn tag value for optional fields
 const TagOptional = "optional"
 
 type ParseWarning struct {
-	Warnings []*json.UnmarshalTypeError
+	Warnings []error
 }
 
 func (w ParseWarning) Error() string {
@@ -38,17 +37,12 @@ func (w ParseWarning) Error() string {
 
 func Unmarshal(data []byte, val interface{}) error {
 	rv := reflect.ValueOf(val)
-	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+	if rv.Kind() != reflect.Ptr {
 		return &json.InvalidUnmarshalError{Type: reflect.TypeOf(val)}
 	}
 
-	v := rv.Elem() // get the elem of the val pointer
-	//vi := reflect.Indirect(rv.Elem())
+	v := rv.Elem() // deref the val pointer
 	vt := v.Type()
-
-	if v.Kind() == reflect.Ptr {
-		//v = vi
-	}
 
 	// hand off to standard unmarshal if not a struct
 	// or a struct pointer
@@ -82,10 +76,13 @@ func Unmarshal(data []byte, val interface{}) error {
 		customJsonTag := ft.Tag.Get("jsawn")
 		jsonTag := ft.Tag.Get("json")
 
-		newVal := reflect.New(f.Type()) // New() returns ptr to new val of f.Type()
+		var newVal reflect.Value
 
-		if jsonTag == "fifth" {
-			runtime.Breakpoint()
+		// if the field type is a ptr, deref it for the "New()" call
+		if f.Type().Kind() == reflect.Ptr {
+			newVal = reflect.New(f.Type().Elem()) // New() returns ptr to new val of f.Type()
+		} else {
+			newVal = reflect.New(f.Type()) // New() returns ptr to new val of f.Type()
 		}
 
 		if raw, ok := rawMap[jsonTag]; ok {
@@ -95,23 +92,26 @@ func Unmarshal(data []byte, val interface{}) error {
 				if errors.As(err, &parseWarn) {
 					// add nested warnings
 					for _, warn := range parseWarn.Warnings {
-						warn.Field = ft.Name + "." + warn.Field
-						warn.Struct = vt.Name()
+						if tErr, ok := warn.(*json.UnmarshalTypeError); ok {
+							tErr.Field = ft.Name + "." + tErr.Field
+							tErr.Struct = vt.Name()
+						}
 						pwarn.Warnings = append(pwarn.Warnings, warn)
 					}
 				} else {
-					// not a nested warning so see if it is a warning or err
+					// not a nested warning so see if it is err on optional field
 					if customJsonTag != TagOptional {
-						return err
+						return err // return the err since this field is not optional
 					}
 
 					// is warning err so capture and move on
 					var parseErr *json.UnmarshalTypeError
 					if errors.As(err, &parseErr) {
-						parseErr.Field = jsonTag
+						parseErr.Field = ft.Name
 						parseErr.Struct = vt.Name()
 						pwarn.Warnings = append(pwarn.Warnings, parseErr)
 					} else {
+						// some other err so make our own type error from it
 						pwarn.Warnings = append(pwarn.Warnings, &json.UnmarshalTypeError{
 							Value:  string(raw),
 							Type:   ft.Type,
@@ -126,7 +126,13 @@ func Unmarshal(data []byte, val interface{}) error {
 			if !f.CanSet() {
 				panic("can't set field")
 			}
-			f.Set(newVal.Elem())
+
+			// if the field type was a point, don't deref the newVal
+			if f.Type().Kind() == reflect.Ptr {
+				f.Set(newVal)
+			} else {
+				f.Set(newVal.Elem())
+			}
 		}
 	}
 

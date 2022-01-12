@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"go-jsawn"
+
+	"github.com/gobuffalo/nulls"
 )
 
 type Custom string
@@ -16,7 +18,7 @@ type Custom string
 // Always error on unmarshal for this type to show problem
 func (c *Custom) UnmarshalJSON(raw []byte) error {
 	return &json.UnmarshalTypeError{
-		Value: `-> ` + string(raw) + ` <-`,
+		Value: string(raw),
 		Type:  reflect.TypeOf(c),
 	}
 }
@@ -49,7 +51,7 @@ func Example_theProblem() {
 	fmt.Println(string(newStr))
 
 	// Output:
-	// json: cannot unmarshal -> "bad value" <- into Go struct field .third of type *jsawn_test.Custom
+	// json: cannot unmarshal "bad value" into Go struct field .third of type *jsawn_test.Custom
 	// {"first":"foo","second":"","third":""}
 }
 
@@ -84,20 +86,26 @@ func ExampleUnmarshal() {
 
 	// Output:
 	// 1 parse warning
-	// json: cannot unmarshal "bad value" into Go value of type jsawn_test.Custom
+	// json: cannot unmarshal "bad value" into Go struct field .Third of type *jsawn_test.Custom
 	// {"first":"foo","second":"not missing anymore","third":""}
 }
 
-type testCase struct {
-	Raw  []byte
-	Want interface{}
-	Got  interface{}
+type dataStruct struct {
+	First   string     `json:"first"`
+	Second  int        `json:"second"`
+	Third   time.Time  `json:"third"`
+	Fourth  subStruct  `json:"fourth"`
+	Fifth   *subStruct `json:"fifth"`
+	Sixth   *float32   `json:"sixth"`
+	Seventh *int       `json:"seventh" jsawn:"optional"`
+	Eighth  nulls.Int  `json:"eighth"`
 }
 
 type subStruct struct {
-	FirstName  string `json:"fname"`
-	MiddleName string `json:"mname" jsawn:"optional"`
-	LastName   string `json:"lname"`
+	FirstName  string   `json:"fname"`
+	MiddleName string   `json:"mname" jsawn:"optional"`
+	LastName   string   `json:"lname"`
+	Aliases    []string `json:"aka" jsawn:"optional"`
 }
 
 func TestUnmarshal(t *testing.T) {
@@ -157,58 +165,72 @@ func TestUnmarshal(t *testing.T) {
 	})
 
 	t.Run("work with structs", func(t *testing.T) {
+		sixth := float32(43.33)
 		wantTime, _ := time.Parse(time.RFC3339, "2022-01-10T16:07:37+01:00")
-		data := []struct {
-			First  string     `json:"first"`
-			Second int        `json:"second"`
-			Third  time.Time  `json:"third"`
-			Fourth subStruct  `json:"fourth"`
-			Fifth  *subStruct `json:"fifth"`
-		}{{
+
+		want := dataStruct{
 			"foo", 42, wantTime,
 			subStruct{FirstName: "foo", LastName: "bar"},
-			&subStruct{FirstName: "foo", LastName: "bar"},
-		}, {
-			"", 0, time.Now(),
-			subStruct{},
-			nil,
-		}}
+			&subStruct{FirstName: "foo", LastName: "bar", Aliases: []string{"joe"}},
+			&sixth, nil, nulls.Int{},
+		}
 
-		want := data[0]
-		got := data[1]
-
+		// create a json string with 3 problems on optional fields
+		// at multiple levels of nesting
 		jsonStr := []byte(`{
 			"first": "foo",
 			"second": 42,
 			"third": "2022-01-10T16:07:37+01:00",
 			"fourth": {
 				"fname": "foo",
-				"mname": 42,
-				"lname": "bar"
+				"lname": "bar",
+				"aka": "['joe']"
 			},
 			"fifth": {
 				"fname": "foo",
 				"mname": 42,
-				"lname": "bar"
-			}
+				"lname": "bar",
+				"aka": ["joe"]
+			},
+			"sixth": 43.33,
+			"seventh": "43",
+			"eighth": null
 		}`)
 
+		// do the actual parsing
+		var got dataStruct
 		err := jsawn.Unmarshal(jsonStr, &got)
-		if err != nil {
-			var parseWarn *jsawn.ParseWarning
-			if errors.As(err, &parseWarn) {
-				fmt.Println(parseWarn)
-			} else {
-				t.Error(err)
-			}
+
+		if err == nil {
+			t.Error("expected parse warnings and got nil for err")
+			return
 		}
 
-		if want.First != got.First ||
-			want.Second != got.Second ||
-			want.Third.Format(time.RFC3339) != got.Third.Format(time.RFC3339) ||
-			want.Fourth != got.Fourth ||
-			!reflect.DeepEqual(want.Fifth, got.Fifth) {
+		// check the warnings
+		var parseWarn *jsawn.ParseWarning
+		if errors.As(err, &parseWarn) {
+			if len(parseWarn.Warnings) != 3 {
+				t.Errorf("parse warnings:\nwant:\n%d\ngot:\n%d\n%+v\n", 3, len(parseWarn.Warnings), parseWarn.Warnings)
+				return
+			}
 
+			if parseWarn.Warnings[0].(*json.UnmarshalTypeError).Field != "Fourth.Aliases" {
+				t.Errorf("want %s got %s", "Fourth.Aliases", parseWarn.Warnings[0].(*json.UnmarshalTypeError).Field)
+			}
+
+			if parseWarn.Warnings[1].(*json.UnmarshalTypeError).Field != "Fifth.MiddleName" {
+				t.Errorf("want %s got %s", "Fifth.MiddleName", parseWarn.Warnings[1].(*json.UnmarshalTypeError).Field)
+			}
+
+			if parseWarn.Warnings[2].(*json.UnmarshalTypeError).Field != "Seventh" {
+				t.Errorf("want %s got %s", "Seventh", parseWarn.Warnings[2].(*json.UnmarshalTypeError).Field)
+			}
+		} else {
+			t.Error(err)
+		}
+
+		// expect want and got to be the same
+		if !reflect.DeepEqual(want, got) {
 			t.Errorf("\nwant:\n%+v\ngot:\n%+v\n", want, got)
 		}
 	})

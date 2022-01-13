@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image/color"
 	"reflect"
 	"testing"
 	"time"
@@ -293,30 +292,6 @@ func TestUnmarshal(t *testing.T) {
 				t.Errorf("want %s got %s", "Fourth.FirstName", parseErr.Field)
 			}
 		} else {
-			t.Error(err)
-		}
-	})
-
-	t.Run("testing", func(t *testing.T) {
-		data := struct {
-			Name  string     `json:"name"`
-			Color color.RGBA `json:"color" jsawn:"optional"`
-		}{
-			Name:  "Bob",
-			Color: color.RGBA{255, 255, 255, 255},
-		}
-
-		jsn, err := json.Marshal(&data)
-		if err != nil {
-			t.Error(err)
-		}
-		fmt.Println(string(jsn))
-
-		jsn = []byte(`{"name":"Bob","color":"#FFFFFF"}`)
-
-		err = jsawn.Unmarshal(jsn, &data)
-		var parseWarn *jsawn.ParseWarning
-		if err != nil && !errors.As(err, &parseWarn) {
 			t.Error(err)
 		}
 	})

@@ -6,8 +6,11 @@ import (
 	"reflect"
 )
 
-// that jsawn tag value for optional fields
-const TagOptional = "optional"
+// the jsawn tag values for struct fields
+const (
+	TagOptional = "optional"
+	TagRequired = "required"
+)
 
 func Unmarshal(data []byte, val interface{}) error {
 	rv := reflect.ValueOf(val)
@@ -75,7 +78,16 @@ func Unmarshal(data []byte, val interface{}) error {
 				} else {
 					// not a nested warning so see if it is err on optional field
 					if customJsonTag != TagOptional {
-						return err // return the err since this field is not optional
+						// return the err since this field is not optional
+
+						// update struct and field since the error was nested
+						if tErr, ok := err.(*json.UnmarshalTypeError); ok {
+							tErr.Field = ft.Name + "." + tErr.Field
+							tErr.Struct = vt.Name()
+							return tErr
+						}
+
+						return err
 					}
 
 					// is warning err so capture and move on
@@ -87,10 +99,10 @@ func Unmarshal(data []byte, val interface{}) error {
 					} else {
 						// some other err so make our own type error from it
 						pwarn.Warnings = append(pwarn.Warnings, &json.UnmarshalTypeError{
-							Value:  string(raw),
+							Value:  "value",
 							Type:   ft.Type,
 							Struct: vt.Name(),
-							Field:  jsonTag,
+							Field:  ft.Name,
 						})
 					}
 					continue
@@ -106,6 +118,14 @@ func Unmarshal(data []byte, val interface{}) error {
 				f.Set(newVal)
 			} else {
 				f.Set(newVal.Elem())
+			}
+		} else if customJsonTag == TagRequired {
+			// missing required field so return error
+			return &json.UnmarshalTypeError{
+				Value:  "missing required field",
+				Type:   ft.Type,
+				Struct: vt.Name(),
+				Field:  ft.Name,
 			}
 		}
 	}

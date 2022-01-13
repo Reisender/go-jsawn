@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/color"
 	"reflect"
 	"testing"
 	"time"
@@ -91,7 +92,7 @@ func ExampleUnmarshal() {
 }
 
 type dataStruct struct {
-	First   string     `json:"first"`
+	First   string     `json:"first" jsawn:"required"`
 	Second  int        `json:"second"`
 	Third   time.Time  `json:"third"`
 	Fourth  subStruct  `json:"fourth"`
@@ -102,7 +103,7 @@ type dataStruct struct {
 }
 
 type subStruct struct {
-	FirstName  string   `json:"fname"`
+	FirstName  string   `json:"fname" jsawn:"required"`
 	MiddleName string   `json:"mname" jsawn:"optional"`
 	LastName   string   `json:"lname"`
 	Aliases    []string `json:"aka" jsawn:"optional"`
@@ -122,7 +123,7 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
-	t.Run("work with string", func(t *testing.T) {
+	t.Run("with string", func(t *testing.T) {
 		var data string
 		want := "foo bar"
 
@@ -136,7 +137,7 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
-	t.Run("work with int", func(t *testing.T) {
+	t.Run("with int", func(t *testing.T) {
 		var data int
 		want := 42
 
@@ -150,7 +151,7 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
-	t.Run("work with time", func(t *testing.T) {
+	t.Run("with a non-base type", func(t *testing.T) {
 		var data time.Time
 		want := time.Now()
 
@@ -164,7 +165,7 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
-	t.Run("work with structs", func(t *testing.T) {
+	t.Run("with optional struct fields", func(t *testing.T) {
 		sixth := float32(43.33)
 		wantTime, _ := time.Parse(time.RFC3339, "2022-01-10T16:07:37+01:00")
 
@@ -232,6 +233,95 @@ func TestUnmarshal(t *testing.T) {
 		// expect want and got to be the same
 		if !reflect.DeepEqual(want, got) {
 			t.Errorf("\nwant:\n%+v\ngot:\n%+v\n", want, got)
+		}
+	})
+
+	t.Run("with required struct fields", func(t *testing.T) {
+		got := dataStruct{}
+
+		// missing the first field which is required
+		jsonStr := []byte(`{
+			"second": 42
+		}`)
+
+		err := jsawn.Unmarshal(jsonStr, &got)
+
+		if err == nil {
+			t.Error("expected err for missing required field")
+			return
+		}
+
+		var parseWarn *jsawn.ParseWarning
+		if errors.As(err, &parseWarn) {
+			t.Errorf("expected err for missing required field but got warning:\n%s", parseWarn)
+			return
+		}
+
+		// check the specific error
+		var parseErr *json.UnmarshalTypeError
+		if errors.As(err, &parseErr) {
+			if parseErr.Field != "First" {
+				t.Errorf("want %s got %s", "First", parseErr.Field)
+			}
+		} else {
+			t.Error(err)
+		}
+	})
+
+	t.Run("with required nested struct fields", func(t *testing.T) {
+		got := dataStruct{}
+
+		// missing the first field which is required
+		jsonStr := []byte(`{
+			"first": "foo",
+			"fourth": {}
+		}`)
+
+		err := jsawn.Unmarshal(jsonStr, &got)
+
+		if err == nil {
+			t.Error("expected err for missing required field")
+			return
+		}
+
+		var parseWarn *jsawn.ParseWarning
+		if errors.As(err, &parseWarn) {
+			t.Errorf("expected err for missing required field but got warning:\n%s", parseWarn)
+			return
+		}
+
+		// check the specific error
+		var parseErr *json.UnmarshalTypeError
+		if errors.As(err, &parseErr) {
+			if parseErr.Field != "Fourth.FirstName" {
+				t.Errorf("want %s got %s", "Fourth.FirstName", parseErr.Field)
+			}
+		} else {
+			t.Error(err)
+		}
+	})
+
+	t.Run("testing", func(t *testing.T) {
+		data := struct {
+			Name  string     `json:"name"`
+			Color color.RGBA `json:"color" jsawn:"optional"`
+		}{
+			Name:  "Bob",
+			Color: color.RGBA{255, 255, 255, 255},
+		}
+
+		jsn, err := json.Marshal(&data)
+		if err != nil {
+			t.Error(err)
+		}
+		fmt.Println(string(jsn))
+
+		jsn = []byte(`{"name":"Bob","color":"#FFFFFF"}`)
+
+		err = jsawn.Unmarshal(jsn, &data)
+		var parseWarn *jsawn.ParseWarning
+		if err != nil && !errors.As(err, &parseWarn) {
+			t.Error(err)
 		}
 	})
 }

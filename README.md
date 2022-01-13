@@ -43,6 +43,8 @@ When there is a problem parsing this:
 You can inspect the warnings like this:
 
 ```golang
+var p Person
+err := jsawn.Unmarshal(jsonStr, &p)
 if err != nil {
   var pw *jsawn.ParseWarning
   errors.As(err, &pw) {

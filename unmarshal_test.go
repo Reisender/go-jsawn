@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"go-jsawn"
-
-	"github.com/gobuffalo/nulls"
 )
 
 type Custom string
@@ -99,7 +97,6 @@ type dataStruct struct {
 	Fifth   *subStruct `json:"fifth"`
 	Sixth   *float32   `json:"sixth"`
 	Seventh *int       `json:"seventh" jsawn:"optional"`
-	Eighth  nulls.Int  `json:"eighth"`
 }
 
 type subStruct struct {
@@ -173,7 +170,7 @@ func TestUnmarshal(t *testing.T) {
 			"foo", 42, wantTime,
 			subStruct{FirstName: "foo", LastName: "bar"},
 			&subStruct{FirstName: "foo", LastName: "bar", Aliases: []string{"joe"}},
-			&sixth, nil, nulls.Int{},
+			&sixth, nil,
 		}
 
 		// create a json string with 3 problems on optional fields
@@ -194,8 +191,7 @@ func TestUnmarshal(t *testing.T) {
 				"aka": ["joe"]
 			},
 			"sixth": 43.33,
-			"seventh": "43",
-			"eighth": null
+			"seventh": "43"
 		}`)
 
 		// do the actual parsing

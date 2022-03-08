@@ -47,7 +47,7 @@ var p Person
 err := jsawn.Unmarshal(jsonStr, &p)
 if err != nil {
   var pw *jsawn.ParseWarning
-  errors.As(err, &pw) {
+  if errors.As(err, &pw) {
     for _, warning := range pw.Warnings {
       // warning is the original *json.UnmarshalTypeError
       log.Warn(warning)

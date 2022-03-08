@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 )
 
 // the jsawn tag values for struct fields
@@ -52,6 +53,9 @@ func Unmarshal(data []byte, val interface{}) error {
 
 		customJsonTag := ft.Tag.Get("jsawn")
 		jsonTag := ft.Tag.Get("json")
+		if parts := strings.Split(jsonTag, ","); len(parts) > 0 {
+			jsonTag = parts[0] // get the first part in case of json:"name,omitempty"
+		}
 
 		var newVal reflect.Value
 

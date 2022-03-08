@@ -147,6 +147,23 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
+	t.Run("with omitempty", func(t *testing.T) {
+		type data struct {
+			Val int `json:"val,omitempty"`
+		}
+		got := data{}
+		want := data{Val: 42}
+
+		err := jsawn.Unmarshal([]byte(`{"val": 42}`), &got)
+		if err != nil {
+			t.Error(err)
+		}
+
+		if got != want {
+			t.Errorf("\nwant:\n%d\ngot:\n%d\n", want, got)
+		}
+	})
+
 	t.Run("with a non-base type", func(t *testing.T) {
 		var data time.Time
 		want := time.Now()

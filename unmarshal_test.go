@@ -89,6 +89,8 @@ func ExampleUnmarshal() {
 }
 
 type dataStruct struct {
+	Identity
+	*Common
 	First   string     `json:"first" jsawn:"required"`
 	Second  int        `json:"second"`
 	Third   time.Time  `json:"third"`
@@ -103,6 +105,15 @@ type subStruct struct {
 	MiddleName string   `json:"mname" jsawn:"optional"`
 	LastName   string   `json:"lname"`
 	Aliases    []string `json:"aka" jsawn:"optional"`
+}
+
+type Identity struct {
+	ID int `json:"id"`
+}
+
+// Common stuct will be embedded into the data struct
+type Common struct {
+	Name string `json:"name"`
 }
 
 func TestUnmarshal(t *testing.T) {
@@ -183,6 +194,8 @@ func TestUnmarshal(t *testing.T) {
 		wantTime, _ := time.Parse(time.RFC3339, "2022-01-10T16:07:37+01:00")
 
 		want := dataStruct{
+			Identity{1},
+			&Common{"Alice"},
 			"foo", 42, wantTime,
 			subStruct{FirstName: "foo", LastName: "bar"},
 			&subStruct{FirstName: "foo", LastName: "bar", Aliases: []string{"joe"}},
@@ -192,6 +205,8 @@ func TestUnmarshal(t *testing.T) {
 		// create a json string with 3 problems on optional fields
 		// at multiple levels of nesting
 		jsonStr := []byte(`{
+			"id": 1,
+			"name": "Alice",
 			"first": "foo",
 			"second": 42,
 			"third": "2022-01-10T16:07:37+01:00",
